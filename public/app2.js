@@ -12,22 +12,87 @@ function getLocation() {
     const lat = position.coords.latitude;
     const lon = position.coords.longitude;
     const apiUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${weatherKey}&lang=ja&units=metric`;
-  
-    fetch(apiUrl)
-      .then(response => response.json())
-      .then(data => {
-        if (data.cod !== 200) {
-          document.getElementById('weather-info').innerHTML = '天気情報を取得できませんでした。';
-          return;
+    const fapiUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${weatherKey}&lang=ja`;
+    
+    Promise.all([fetch(apiUrl), fetch(fapiUrl)])
+    .then(responses => Promise.all(responses.map(response => response.json())))
+    .then(data => {
+      const weatherData = data[0]; // 現在の天気データ
+      const forecastData = data[1]; // 予報データ
+
+      // 現在の天気データが正しく取得できていない場合の処理
+      if (weatherData.cod !== 200) {
+        document.getElementById('weather-info').innerHTML = '天気情報を取得できませんでした。';
+        return;
+      }  
+        //現在の気象データの定義
+        const weathernow = weatherData.weather[0].description;
+        const temperaturenow = weatherData.main.temp_min;
+        const humiditynow = weatherData.main.humidity;
+        const windSpeednow = weatherData.wind.speed;
+        const city = weatherData.name;
+        const iconnow = weatherData.weather[0].icon;
+
+        //予報データの定義
+        let weatherfor = [weathernow];
+        let humidityfor = 0;
+        let windSpeedfor = 0;
+        let iconfor =[iconnow];
+        let temperaturefor = 0;
+        let Pp = [];
+        let Rt = [];
+
+        //配列内の要素の最大値とその位置をとる関数
+        const aryMax = function(ary){
+          let maximum = ary[0];
+          let order = 0;
+
+          for(let i = 0; i < maximum.length; i++){
+            if(ary[i] > maximum){
+              maximum = ary[i];
+              order = i;
+            }
+          }
+          return [maximum, order]
+        };
+
+        //配列の要素の最頻値をとる関数
+        Array.prototype.Mode = function() {
+          if (this.length === 0) return null;
+          const frequency = {};
+          let maxCount = 0;
+          let maxItem = null;
+
+          for (let i = 0; i < this.length; i++) {
+              const item = this[i];
+              frequency[item] = (frequency[item] || 0) + 1;
+              if (frequency[item] > maxCount) {
+                  maxCount = frequency[item];
+                  maxItem = item;
+              }
+          }
+          return maxItem;
+      }
+
+        //9:00~21:00(活動時間)のデータをまとめる
+        for(let i = 0; i < 5; i++){
+          humidityfor += forecastData.list[i].main.humidity;
+          windSpeedfor += forecastData.list[i].wind.speed;
+          temperaturefor += forecastData.list[i].main.temp_min;   //気温は最低気温に合わせました
+          Pp.push(forecastData.list[i].pop * 100);
+          Rt.push(forecastData.list[i].dt_txt);
+          weatherfor.push(forecastData.list[i].weather[0].description);
+          iconfor.push(forecastData.list[i].weather[0].icon);
         }
-  
-        const weather = data.weather[0].description;
-        const temperature = data.main.temp;
-        const humidity = data.main.humidity;
-        const windSpeed = data.wind.speed;
-        const city = data.name;
-        const icon = data.weather[0].icon;
-  
+
+        let temperature = Math.round((temperaturenow + temperaturefor) / 6);
+        let windSpeed = (Math.round(((windSpeednow + windSpeedfor) / 6) * 10) / 10);
+        let humidity = Math.round((humiditynow + humidityfor) / 6);
+        let pop = aryMax(Pp)[0];
+        let jtime = aryMax(Pp)[1];
+        let time = Rt[jtime].slice(11, 16);
+        let weather = weatherfor.Mode();
+        let icon =iconfor.Mode();  
         // personalizedTemperatureを加算
         const personalizedTemp = getPersonalizedTemperature();
         const clothingindex = calculateNET(temperature, windSpeed, humidity) + personalizedTemp;
